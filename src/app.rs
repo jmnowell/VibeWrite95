@@ -8,7 +8,9 @@ pub enum AppMode {
     Editing,
     CommandPrefix(PrefixKey),
     Dialog(DialogKind),
+    #[allow(dead_code)]
     OutlineNav,
+    #[allow(dead_code)]
     ProjectNav,
 }
 
@@ -29,6 +31,7 @@ pub enum DialogKind {
     History,
     DiffView,
     FindReplace,
+    ExportPdf,
 }
 
 pub struct App {
@@ -59,7 +62,6 @@ pub struct App {
     pub new_file_requested: bool,
     pub open_file_requested: bool,
     pub close_tab_requested: bool,
-    pub print_requested: bool,
     pub export_pdf_requested: bool,
     pub spell_check_requested: bool,
     pub bold_requested: bool,
@@ -96,7 +98,9 @@ pub struct App {
 pub enum ConfirmAction {
     SaveBeforeQuit,
     SaveBeforeNew,
+    #[allow(dead_code)]
     SaveBeforeOpen,
+    #[allow(dead_code)]
     SaveBeforeClose,
 }
 
@@ -126,7 +130,6 @@ impl App {
             new_file_requested: false,
             open_file_requested: false,
             close_tab_requested: false,
-            print_requested: false,
             export_pdf_requested: false,
             spell_check_requested: false,
             bold_requested: false,
@@ -164,7 +167,6 @@ impl App {
         self.new_file_requested = false;
         self.open_file_requested = false;
         self.close_tab_requested = false;
-        self.print_requested = false;
         self.export_pdf_requested = false;
         self.spell_check_requested = false;
         self.bold_requested = false;

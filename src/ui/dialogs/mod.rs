@@ -1,9 +1,13 @@
 pub mod file_dialog;
 pub mod confirm;
 pub mod input;
+pub mod history;
+pub mod diff_view;
+pub mod spell_check;
+pub mod find;
 
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+use ratatui::widgets::{Block, Borders, Clear};
 
 pub fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
     let x = area.x + area.width.saturating_sub(width) / 2;

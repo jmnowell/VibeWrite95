@@ -56,12 +56,12 @@ fn main_help() -> Vec<Line<'static>> {
             text_span(" "), key_span("^K"), text_span(" Block/File  "),
             key_span("^Q"), text_span(" Quick/Search"),
             sep(),
-            key_span("^P"), text_span(" Print  "),
+            key_span("^P"), text_span(" Export PDF  "),
             key_span("F7"), text_span(" Spell  "),
             key_span("^W"), text_span(" Close"),
         ]),
         Line::from(vec![
-            text_span(" "), key_span("^K"), text_span(": S Save  Q Quit  P Print  N NewProj  O OpenProj"),
+            text_span(" "), key_span("^K"), text_span(": S Save  Q Quit  P Export PDF  N NewProj  O OpenProj"),
         ]),
         Line::from(vec![
             text_span(" "), key_span("^Q"), text_span(": F Find  A Replace  C Commit  H History  V Revert"),
@@ -95,8 +95,7 @@ fn ctrl_k_help() -> Vec<Line<'static>> {
             text_span(" "),
             key_span("N"), text_span(" New project  "),
             key_span("O"), text_span(" Open project  "),
-            key_span("P"), text_span(" Print  "),
-            key_span("X"), text_span(" Export PDF  "),
+            key_span("P"), text_span(" Export PDF  "),
             key_span("1-9"), text_span(" Tab"),
         ]),
     ]

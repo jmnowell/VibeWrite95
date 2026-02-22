@@ -13,6 +13,7 @@ pub fn write_file(path: &Path, content: &str) -> io::Result<()> {
     fs::write(path, content)
 }
 
+#[allow(dead_code)]
 pub fn list_files_in_dir(dir: &Path) -> io::Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     if dir.is_dir() {

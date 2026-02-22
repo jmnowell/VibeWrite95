@@ -3,6 +3,7 @@ use ratatui::prelude::*;
 
 pub struct EditorBuffer<'a> {
     pub textarea: TextArea<'a>,
+    pub scroll_row: usize,
 }
 
 impl<'a> EditorBuffer<'a> {
@@ -42,10 +43,12 @@ impl<'a> EditorBuffer<'a> {
         self.textarea.lines().join("\n")
     }
 
+    #[allow(dead_code)]
     pub fn line_count(&self) -> usize {
         self.textarea.lines().len()
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.textarea.lines().len() <= 1 && self.textarea.lines().first().map_or(true, |l| l.is_empty())
     }

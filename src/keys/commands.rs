@@ -6,7 +6,6 @@ pub enum KeyAction {
     Quit,
     ForwardToEditor(Input),
     Handled,
-    None,
 }
 
 pub fn dispatch_key(app: &mut App, key: KeyEvent) -> KeyAction {
@@ -61,10 +60,6 @@ fn dispatch_ctrl_k(app: &mut App, key: KeyEvent) -> KeyAction {
             KeyAction::Handled
         }
         KeyCode::Char('p') | KeyCode::Char('P') => {
-            app.print_requested = true;
-            KeyAction::Handled
-        }
-        KeyCode::Char('x') | KeyCode::Char('X') => {
             app.export_pdf_requested = true;
             KeyAction::Handled
         }
@@ -209,7 +204,7 @@ fn dispatch_editing(app: &mut App, key: KeyEvent) -> KeyAction {
                 return KeyAction::Handled;
             }
             KeyCode::Char('p') => {
-                app.print_requested = true;
+                app.export_pdf_requested = true;
                 return KeyAction::Handled;
             }
             KeyCode::Char('a') => {

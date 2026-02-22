@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CursorPosition {
     pub line: usize,
@@ -5,6 +6,7 @@ pub struct CursorPosition {
 }
 
 impl CursorPosition {
+    #[allow(dead_code)]
     pub fn new(line: usize, col: usize) -> Self {
         Self { line, col }
     }

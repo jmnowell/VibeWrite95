@@ -7,6 +7,7 @@ pub struct FileDialogState {
     pub cursor_pos: usize,
     pub title: String,
     pub completions: Vec<String>,
+    #[allow(dead_code)]
     pub selected_completion: usize,
 }
 
