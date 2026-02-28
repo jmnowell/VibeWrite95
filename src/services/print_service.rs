@@ -12,6 +12,10 @@ pub fn export_pdf(content: &str, output_path: &Path) -> io::Result<()> {
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
     let font_bold = doc.add_builtin_font(BuiltinFont::HelveticaBold)
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let font_italic = doc.add_builtin_font(BuiltinFont::HelveticaOblique)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let font_bold_italic = doc.add_builtin_font(BuiltinFont::HelveticaBoldOblique)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
     let margin_mm: f32 = 25.4; // 1 inch
     let start_y: f32 = 279.4 - margin_mm;
@@ -32,27 +36,48 @@ pub fn export_pdf(content: &str, output_path: &Path) -> io::Result<()> {
         if trimmed.starts_with("# ") {
             let text = trimmed.strip_prefix("# ").unwrap_or(trimmed);
             let size = 24.0_f32;
+            y -= line_height * 0.5; // extra space above heading so ascenders don't overlap the previous line
             current_layer.use_text(text, size, Mm(margin_mm), Mm(y), &font_bold);
             y -= line_height * (size / body_size) + line_height * 0.5;
         } else if trimmed.starts_with("## ") {
             let text = trimmed.strip_prefix("## ").unwrap_or(trimmed);
             let size = 18.0_f32;
+            y -= line_height * 0.5;
             current_layer.use_text(text, size, Mm(margin_mm), Mm(y), &font_bold);
             y -= line_height * (size / body_size) + line_height * 0.5;
         } else if trimmed.starts_with("### ") {
             let text = trimmed.strip_prefix("### ").unwrap_or(trimmed);
             let size = 14.0_f32;
+            y -= line_height * 0.5;
             current_layer.use_text(text, size, Mm(margin_mm), Mm(y), &font_bold);
             y -= line_height * (size / body_size) + line_height * 0.5;
         } else {
-            // Render body text with inline bold support
+            // Render body text with inline emphasis and underline support
             let runs = parse_inline_runs(line);
             let mut x = margin_mm;
             for run in &runs {
                 if !run.text.is_empty() {
-                    let f = if run.bold { &font_bold } else { &font };
+                    let f = match (run.bold, run.italic) {
+                        (true, true) => &font_bold_italic,
+                        (true, false) => &font_bold,
+                        (false, true) => &font_italic,
+                        (false, false) => &font,
+                    };
                     current_layer.use_text(&run.text, body_size, Mm(x), Mm(y), f);
-                    x += text_width_mm(&run.text, body_size);
+                    let run_width = text_width_mm(&run.text, body_size);
+                    if run.underline {
+                        let y_under = y - 0.7; // 0.7mm below baseline
+                        current_layer.set_outline_color(Color::Rgb(Rgb::new(0.0, 0.0, 0.0, None)));
+                        current_layer.set_outline_thickness(0.5);
+                        current_layer.add_line(Line {
+                            points: vec![
+                                (Point::new(Mm(x), Mm(y_under)), false),
+                                (Point::new(Mm(x + run_width), Mm(y_under)), false),
+                            ],
+                            is_closed: false,
+                        });
+                    }
+                    x += run_width;
                 }
             }
             y -= line_height;
@@ -68,42 +93,58 @@ pub fn export_pdf(content: &str, output_path: &Path) -> io::Result<()> {
 struct TextRun {
     text: String,
     bold: bool,
+    italic: bool,
+    underline: bool,
 }
 
-/// Parse a line into runs of plain and bold text by handling `**...**` markers.
-/// Italic (`*...*`) and underline (`++...++`) markers are stripped but rendered plain,
-/// since we only have regular and bold builtin fonts.
+/// Parse a line into runs with bold/italic/underline inline style flags.
 fn parse_inline_runs(line: &str) -> Vec<TextRun> {
     let mut runs: Vec<TextRun> = Vec::new();
     let mut current = String::new();
     let mut bold = false;
+    let mut italic = false;
+    let mut underline = false;
     let mut chars = line.chars().peekable();
 
     while let Some(ch) = chars.next() {
         if ch == '*' && chars.peek() == Some(&'*') {
             // Bold delimiter **
             chars.next();
-            // Flush current run
             if !current.is_empty() {
-                runs.push(TextRun { text: current.clone(), bold });
+                runs.push(TextRun { text: current.clone(), bold, italic, underline });
                 current.clear();
             }
             bold = !bold;
         } else if ch == '*' {
-            // Italic * — strip marker, keep same bold state
+            // Italic delimiter *
+            if !current.is_empty() {
+                runs.push(TextRun { text: current.clone(), bold, italic, underline });
+                current.clear();
+            }
+            italic = !italic;
         } else if ch == '+' && chars.peek() == Some(&'+') {
-            // Underline ++ — strip marker
+            // Underline delimiter ++
             chars.next();
+            if !current.is_empty() {
+                runs.push(TextRun { text: current.clone(), bold, italic, underline });
+                current.clear();
+            }
+            underline = !underline;
         } else if ch == '_' && chars.peek() == Some(&'_') {
             // Bold via __ syntax
             chars.next();
             if !current.is_empty() {
-                runs.push(TextRun { text: current.clone(), bold });
+                runs.push(TextRun { text: current.clone(), bold, italic, underline });
                 current.clear();
             }
             bold = !bold;
         } else if ch == '_' {
-            // Italic _ — strip marker
+            // Italic delimiter _
+            if !current.is_empty() {
+                runs.push(TextRun { text: current.clone(), bold, italic, underline });
+                current.clear();
+            }
+            italic = !italic;
         } else if ch == '`' {
             // Inline code — strip backtick
         } else {
@@ -112,7 +153,7 @@ fn parse_inline_runs(line: &str) -> Vec<TextRun> {
     }
 
     if !current.is_empty() {
-        runs.push(TextRun { text: current, bold });
+        runs.push(TextRun { text: current, bold, italic, underline });
     }
 
     runs
@@ -154,6 +195,8 @@ mod tests {
         assert_eq!(runs.len(), 1);
         assert_eq!(runs[0].text, "This is a test.");
         assert!(!runs[0].bold);
+        assert!(!runs[0].italic);
+        assert!(!runs[0].underline);
     }
 
     #[test]
@@ -162,6 +205,30 @@ mod tests {
         assert_eq!(runs.len(), 1);
         assert_eq!(runs[0].text, "This is another test.");
         assert!(runs[0].bold);
+        assert!(!runs[0].italic);
+        assert!(!runs[0].underline);
+    }
+
+    #[test]
+    fn test_underline_markers_set_underline_flag() {
+        let runs = parse_inline_runs("++underlined text++");
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].text, "underlined text");
+        assert!(!runs[0].bold);
+        assert!(!runs[0].italic);
+        assert!(runs[0].underline);
+    }
+
+    #[test]
+    fn test_underline_mixed_with_plain() {
+        let runs = parse_inline_runs("plain ++under++ plain");
+        assert_eq!(runs.len(), 3);
+        assert_eq!(runs[0].text, "plain ");
+        assert!(!runs[0].underline);
+        assert_eq!(runs[1].text, "under");
+        assert!(runs[1].underline);
+        assert_eq!(runs[2].text, " plain");
+        assert!(!runs[2].underline);
     }
 
     #[test]
@@ -170,19 +237,22 @@ mod tests {
         assert_eq!(runs.len(), 3);
         assert_eq!(runs[0].text, "Some ");
         assert!(!runs[0].bold);
+        assert!(!runs[0].italic);
         assert_eq!(runs[1].text, "bold");
         assert!(runs[1].bold);
+        assert!(!runs[1].italic);
         assert_eq!(runs[2].text, " words here.");
         assert!(!runs[2].bold);
+        assert!(!runs[2].italic);
     }
 
     #[test]
-    fn test_italic_markers_stripped_as_plain() {
+    fn test_italic_markers_set_italic_style() {
         let runs = parse_inline_runs("*italic text*");
-        // Markers stripped, content rendered as plain
-        let combined: String = runs.iter().map(|r| r.text.as_str()).collect();
-        assert_eq!(combined, "italic text");
-        assert!(runs.iter().all(|r| !r.bold));
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].text, "italic text");
+        assert!(!runs[0].bold);
+        assert!(runs[0].italic);
     }
 
     #[test]
@@ -191,6 +261,19 @@ mod tests {
         assert_eq!(runs.len(), 1);
         assert_eq!(runs[0].text, "bold via underscores");
         assert!(runs[0].bold);
+        assert!(!runs[0].italic);
+    }
+
+    #[test]
+    fn test_bold_and_italic_combination() {
+        let runs = parse_inline_runs("**bold _and italic_**");
+        assert_eq!(runs.len(), 2);
+        assert_eq!(runs[0].text, "bold ");
+        assert!(runs[0].bold);
+        assert!(!runs[0].italic);
+        assert_eq!(runs[1].text, "and italic");
+        assert!(runs[1].bold);
+        assert!(runs[1].italic);
     }
 
     #[test]

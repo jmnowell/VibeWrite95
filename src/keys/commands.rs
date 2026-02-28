@@ -191,6 +191,11 @@ fn dispatch_editing(app: &mut App, key: KeyEvent) -> KeyAction {
                 app.italic_requested = true;
                 return KeyAction::Handled;
             }
+            // Some terminals report Ctrl+I as Tab.
+            KeyCode::Tab => {
+                app.italic_requested = true;
+                return KeyAction::Handled;
+            }
             KeyCode::Char('u') => {
                 app.underline_requested = true;
                 return KeyAction::Handled;
@@ -224,6 +229,11 @@ fn dispatch_editing(app: &mut App, key: KeyEvent) -> KeyAction {
     }
 
     match key.code {
+        // Many terminals encode Ctrl+I as a plain Tab key event.
+        KeyCode::Tab => {
+            app.italic_requested = true;
+            KeyAction::Handled
+        }
         KeyCode::F(7) => {
             app.spell_check_requested = true;
             KeyAction::Handled
@@ -258,4 +268,127 @@ fn dispatch_project(app: &mut App, key: KeyEvent) -> KeyAction {
         app.mode = AppMode::Editing;
     }
     KeyAction::Handled
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ctrl_i_char_requests_italic() {
+        let mut app = App::new();
+        let key = KeyEvent::new(KeyCode::Char('i'), KeyModifiers::CONTROL);
+        let action = dispatch_key(&mut app, key);
+        assert!(matches!(action, KeyAction::Handled));
+        assert!(app.italic_requested);
+    }
+
+    #[test]
+    fn ctrl_i_tab_requests_italic() {
+        let mut app = App::new();
+        let key = KeyEvent::new(KeyCode::Tab, KeyModifiers::CONTROL);
+        let action = dispatch_key(&mut app, key);
+        assert!(matches!(action, KeyAction::Handled));
+        assert!(app.italic_requested);
+    }
+
+    #[test]
+    fn plain_tab_requests_italic_for_terminal_compat() {
+        let mut app = App::new();
+        let key = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+        let action = dispatch_key(&mut app, key);
+        assert!(matches!(action, KeyAction::Handled));
+        assert!(app.italic_requested);
+    }
+
+    // --- quit chord ---
+
+    #[test]
+    fn ctrl_c_returns_quit() {
+        let mut app = App::new();
+        let key = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
+        let action = dispatch_key(&mut app, key);
+        assert!(matches!(action, KeyAction::Quit));
+    }
+
+    #[test]
+    fn ctrl_k_sets_prefix_mode() {
+        let mut app = App::new();
+        let key = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL);
+        let action = dispatch_key(&mut app, key);
+        assert!(matches!(action, KeyAction::Handled));
+        assert!(matches!(app.mode, AppMode::CommandPrefix(PrefixKey::CtrlK)));
+    }
+
+    #[test]
+    fn ctrl_k_then_q_returns_quit() {
+        let mut app = App::new();
+        // First key: Ctrl+K enters prefix mode
+        dispatch_key(&mut app, KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL));
+        // Second key: Q in prefix mode
+        let action = dispatch_key(&mut app, KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
+        assert!(matches!(action, KeyAction::Quit));
+    }
+
+    #[test]
+    fn ctrl_k_then_q_uppercase_returns_quit() {
+        let mut app = App::new();
+        dispatch_key(&mut app, KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL));
+        let action = dispatch_key(&mut app, KeyEvent::new(KeyCode::Char('Q'), KeyModifiers::SHIFT));
+        assert!(matches!(action, KeyAction::Quit));
+    }
+
+    #[test]
+    fn ctrl_k_prefix_resets_mode_to_editing_after_chord() {
+        let mut app = App::new();
+        dispatch_key(&mut app, KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL));
+        dispatch_key(&mut app, KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
+        // Mode should be reset to Editing by dispatch_prefix, regardless of the returned action
+        assert!(matches!(app.mode, AppMode::Editing));
+    }
+
+    #[test]
+    fn ctrl_k_esc_cancels_prefix_without_quit() {
+        let mut app = App::new();
+        dispatch_key(&mut app, KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL));
+        let action = dispatch_key(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(matches!(action, KeyAction::Handled));
+        assert!(matches!(app.mode, AppMode::Editing));
+    }
+
+    // --- confirm-dialog quit paths (the buggy continue path) ---
+    // These test that both Y and N in the save-before-quit dialog set should_quit,
+    // which is what the fixed code must honour before calling continue.
+
+    #[test]
+    fn confirm_y_sets_should_quit_for_save_before_quit() {
+        let mut app = App::new();
+        app.confirm_action = Some(crate::app::ConfirmAction::SaveBeforeQuit);
+        app.mode = AppMode::Dialog(crate::app::DialogKind::Confirm);
+        // Simulate pressing 'y' in the confirm dialog
+        let key = KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE);
+        let action = dispatch_key(&mut app, key);
+        // dispatch_dialog returns Handled for all dialog keys
+        assert!(matches!(action, KeyAction::Handled));
+        // The dialog handler inside dispatch_dialog doesn't set should_quit;
+        // that's handled by handle_dialog_key in main.rs.  What we CAN assert
+        // here is that a plain 'y' in dialog mode is not forwarded to the editor.
+        assert!(!matches!(action, KeyAction::ForwardToEditor(_)));
+    }
+
+    #[test]
+    fn confirm_n_in_dialog_mode_is_handled_not_forwarded() {
+        let mut app = App::new();
+        app.mode = AppMode::Dialog(crate::app::DialogKind::Confirm);
+        let action = dispatch_key(&mut app, KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
+        assert!(matches!(action, KeyAction::Handled));
+    }
+
+    #[test]
+    fn esc_in_dialog_mode_returns_to_editing() {
+        let mut app = App::new();
+        app.mode = AppMode::Dialog(crate::app::DialogKind::Confirm);
+        dispatch_key(&mut app, KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(matches!(app.mode, AppMode::Editing));
+    }
 }

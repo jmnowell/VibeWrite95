@@ -15,7 +15,7 @@ impl<'a> EditorBuffer<'a> {
         textarea.set_block(
             ratatui::widgets::Block::default()
         );
-        Self { textarea }
+        Self { textarea, scroll_row: 0 }
     }
 
     pub fn from_text(text: &str) -> Self {
@@ -28,7 +28,7 @@ impl<'a> EditorBuffer<'a> {
         textarea.set_block(
             ratatui::widgets::Block::default()
         );
-        Self { textarea }
+        Self { textarea, scroll_row: 0 }
     }
 
     pub fn cursor_line(&self) -> usize {

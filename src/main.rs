@@ -245,6 +245,9 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, state: &mut Ap
 
             if let AppMode::Dialog(kind) = state.app.mode {
                 handle_dialog_key(state, kind, key.code, key.modifiers);
+                if state.app.should_quit {
+                    return Ok(());
+                }
                 continue;
             }
 
@@ -889,5 +892,76 @@ fn do_commit(state: &mut AppState, message: &str) {
             let content = state.buffer.content();
             let _ = services::versioning::commit(&project.directory_path, &filename, &content, message);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_state() -> AppState {
+        AppState::new()
+    }
+
+    /// Simulate the confirm-dialog key handler and return the resulting state.
+    fn confirm_key(code: KeyCode) -> AppState {
+        let mut state = make_state();
+        state.app.confirm_action = Some(ConfirmAction::SaveBeforeQuit);
+        state.app.mode = AppMode::Dialog(DialogKind::Confirm);
+        handle_dialog_key(&mut state, DialogKind::Confirm, code, KeyModifiers::NONE);
+        state
+    }
+
+    // --- confirm dialog → should_quit (the bug path) ---
+
+    #[test]
+    fn confirm_y_sets_should_quit() {
+        let state = confirm_key(KeyCode::Char('y'));
+        assert!(state.app.should_quit, "pressing Y in save-before-quit must set should_quit");
+    }
+
+    #[test]
+    fn confirm_y_uppercase_sets_should_quit() {
+        let state = confirm_key(KeyCode::Char('Y'));
+        assert!(state.app.should_quit);
+    }
+
+    #[test]
+    fn confirm_n_sets_should_quit_without_saving() {
+        let state = confirm_key(KeyCode::Char('n'));
+        assert!(state.app.should_quit, "pressing N (discard) in save-before-quit must also set should_quit");
+    }
+
+    #[test]
+    fn confirm_n_uppercase_sets_should_quit() {
+        let state = confirm_key(KeyCode::Char('N'));
+        assert!(state.app.should_quit);
+    }
+
+    #[test]
+    fn confirm_c_cancels_without_quitting() {
+        let state = confirm_key(KeyCode::Char('c'));
+        assert!(!state.app.should_quit, "pressing C cancels the dialog, should not quit");
+        assert!(matches!(state.app.mode, AppMode::Editing));
+    }
+
+    #[test]
+    fn confirm_esc_cancels_without_quitting() {
+        let state = confirm_key(KeyCode::Esc);
+        assert!(!state.app.should_quit, "pressing Esc cancels the dialog, should not quit");
+    }
+
+    // --- verify mode is reset after confirm ---
+
+    #[test]
+    fn confirm_y_closes_dialog_mode() {
+        let state = confirm_key(KeyCode::Char('y'));
+        assert!(matches!(state.app.mode, AppMode::Editing), "dialog should be closed after confirming");
+    }
+
+    #[test]
+    fn confirm_n_closes_dialog_mode() {
+        let state = confirm_key(KeyCode::Char('n'));
+        assert!(matches!(state.app.mode, AppMode::Editing));
     }
 }
