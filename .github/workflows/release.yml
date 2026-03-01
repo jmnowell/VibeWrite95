@@ -78,7 +78,7 @@ jobs:
 
   macos-package:
     name: macOS package
-    runs-on: macos-13
+    runs-on: macos-latest
     needs: metadata
     steps:
       - name: Check out repository
@@ -141,13 +141,8 @@ jobs:
       - name: Build MSI package
         shell: pwsh
         run: |
-          cargo wix --no-build
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          $msi = Get-ChildItem "target/wix/*.msi" | Select-Object -First 1
-          if (-not $msi) {
-            throw "MSI package was not generated."
-          }
-          Copy-Item $msi.FullName "dist/${env:APP_NAME}-windows-x64.msi"
+          cargo wix --no-build --output "dist/${env:APP_NAME}-windows-x64.msi"
 
       - name: Upload Windows package
         uses: actions/upload-artifact@v4
