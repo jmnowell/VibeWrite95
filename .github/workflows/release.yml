@@ -138,6 +138,10 @@ jobs:
         shell: pwsh
         run: cargo install cargo-wix --version 0.3.8
 
+      - name: Generate WiX source
+        shell: pwsh
+        run: cargo wix init --force
+
       - name: Build MSI package
         shell: pwsh
         run: |
