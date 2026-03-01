@@ -1,0 +1,178 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  APP_NAME: vibe-write-95
+
+jobs:
+  metadata:
+    name: Resolve release metadata
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Read Cargo package version
+        id: version
+        shell: bash
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Validate tag matches Cargo version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          test "v${{ steps.version.outputs.value }}" = "${{ github.ref_name }}"
+
+  linux-packages:
+    name: Linux packages
+    runs-on: ubuntu-24.04
+    needs: metadata
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --locked --release
+
+      - name: Set up Go for nfpm
+        uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+
+      - name: Install nfpm
+        shell: bash
+        run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.43.1
+
+      - name: Build Linux packages
+        shell: bash
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          mkdir -p dist
+          "$HOME/go/bin/nfpm" package --config .github/packaging/nfpm.yaml --packager deb --target "dist/${APP_NAME}-linux-amd64.deb"
+          "$HOME/go/bin/nfpm" package --config .github/packaging/nfpm.yaml --packager rpm --target "dist/${APP_NAME}-linux-x86_64.rpm"
+
+      - name: Upload Linux packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-linux
+          path: dist/*
+
+  macos-package:
+    name: macOS package
+    runs-on: macos-13
+    needs: metadata
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --locked --release
+
+      - name: Build macOS installer package
+        shell: bash
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          mkdir -p dist/pkgroot/usr/local/bin
+          cp "target/release/${APP_NAME}" "dist/pkgroot/usr/local/bin/${APP_NAME}"
+          pkgbuild \
+            --root dist/pkgroot \
+            --identifier com.jmnowell.vibe-write-95 \
+            --version "$VERSION" \
+            --install-location / \
+            "dist/${APP_NAME}-macos-x64.pkg"
+
+      - name: Upload macOS package
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-macos
+          path: dist/*.pkg
+
+  windows-package:
+    name: Windows package
+    runs-on: windows-2022
+    needs: metadata
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry and build artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --locked --release
+
+      - name: Install WiX Toolset
+        shell: pwsh
+        run: choco install wixtoolset --no-progress --yes
+
+      - name: Install cargo-wix
+        shell: pwsh
+        run: cargo install cargo-wix --version 0.3.8
+
+      - name: Build MSI package
+        shell: pwsh
+        run: |
+          cargo wix --no-build
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $msi = Get-ChildItem "target/wix/*.msi" | Select-Object -First 1
+          if (-not $msi) {
+            throw "MSI package was not generated."
+          }
+          Copy-Item $msi.FullName "dist/${env:APP_NAME}-windows-x64.msi"
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-windows
+          path: dist/*.msi
+
+  publish-release:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    needs:
+      - linux-packages
+      - macos-package
+      - windows-package
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: packages-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/*

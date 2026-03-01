@@ -3,6 +3,17 @@ name = "vibe-write-95"
 version = "0.1.0"
 edition = "2021"
 description = "A WordStar-inspired terminal markdown editor"
+authors = ["Joseph Nowell"]
+readme = "README.md"
+repository = "https://github.com/jmnowell/VibeWrite95"
+homepage = "https://github.com/jmnowell/VibeWrite95"
+
+[package.metadata.wix]
+upgrade-guid = "9D5C5AB1-8D0F-4A63-8C8F-52DA7885AC6F"
+path-guid = "6A0E1280-D02B-420F-BD64-1D59E34A6A3E"
+manufacturer = "Joseph Nowell"
+license = false
+eula = false
 
 [dependencies]
 ratatui = "0.29"

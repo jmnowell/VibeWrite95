@@ -1,0 +1,14 @@
+name: vibe-write-95
+arch: amd64
+platform: linux
+version: ${VERSION}
+section: utils
+priority: optional
+maintainer: Joseph Nowell <jmnowell@users.noreply.github.com>
+description: |
+  A WordStar-inspired terminal markdown editor.
+homepage: https://github.com/jmnowell/VibeWrite95
+license: Unspecified
+contents:
+  - src: ./target/release/vibe-write-95
+    dst: /usr/bin/vibe-write-95
